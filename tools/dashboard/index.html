@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Hams_Alarm · Build & Phone</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root { --cream:#F3EADB; --ink:#1B1A17; --teal:#0F5E5B; --ruby:#A3202C; --gold:#F2A93B; --plum:#3E2A6B; --crimson:#B4232F; }
+  * { box-sizing: border-box; }
+  body { margin:0; height:100vh; background:var(--cream); color:var(--ink); font-family:'League Spartan',system-ui,sans-serif;
+         display:grid; grid-template-columns: 1fr 430px; gap:28px; padding:28px; overflow:hidden; }
+  .eyebrow { font-weight:700; font-size:14px; letter-spacing:3px; text-transform:uppercase; color:rgba(27,26,23,.5); }
+  h1 { margin:6px 0 0; font-weight:900; font-size:44px; letter-spacing:-1px; }
+  .build { background:var(--teal); color:var(--cream); border-radius:28px; padding:34px 38px; margin-top:22px; }
+  .build .eyebrow { color:rgba(243,234,219,.6); }
+  .pct { font-weight:900; font-size:150px; line-height:.9; letter-spacing:-4px; font-variant-numeric: tabular-nums; }
+  .pct small { font-size:60px; color:#FFC15E; }
+  .stage { font-size:28px; font-weight:700; margin-top:10px; }
+  .meta { font-size:18px; font-weight:500; color:rgba(243,234,219,.75); margin-top:6px; }
+  .bar { height:22px; border-radius:11px; background:rgba(243,234,219,.18); margin-top:26px; overflow:hidden; }
+  .fill { height:100%; border-radius:11px; background:#FFC15E; transition: width 1s ease; }
+  .bar.active .fill { background-image: repeating-linear-gradient(45deg, rgba(27,26,23,.12) 0 14px, transparent 14px 28px); background-size: 40px 40px; animation: move 1s linear infinite; }
+  @keyframes move { to { background-position: 40px 0; } }
+  .status { display:inline-block; font-weight:800; font-size:15px; letter-spacing:2px; padding:7px 14px; border-radius:999px; background:#FFC15E; color:var(--ink); }
+  .done .status { background:var(--cream); }
+  .err .build { background:var(--ruby); }
+  .apk { display:inline-block; margin-top:22px; background:#FFC15E; color:var(--ink); font-weight:800; font-size:20px; padding:14px 22px; border-radius:999px; text-decoration:none; }
+  table { width:100%; border-collapse:collapse; margin-top:12px; font-size:18px; }
+  td { padding:11px 4px; border-bottom:1px solid rgba(27,26,23,.12); font-weight:600; }
+  td.s { font-weight:800; }
+  .FINISHED { color:var(--teal); } .ERRORED { color:var(--crimson); } .CANCELED { color:rgba(27,26,23,.45); } .IN_PROGRESS, .IN_QUEUE, .NEW { color:var(--plum); }
+  .right { display:flex; flex-direction:column; min-height:0; }
+  .phone { flex:1; min-height:0; margin-top:12px; background:var(--ink); border-radius:40px; padding:14px; display:flex; align-items:center; justify-content:center; }
+  .phone img { max-height:100%; max-width:100%; border-radius:28px; }
+  .phone .off { color:var(--cream); font-size:20px; text-align:center; padding:30px; line-height:1.4; }
+  .stats { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+  .stat { background:var(--plum); color:var(--cream); border-radius:20px; padding:14px 18px; }
+  .stat b { display:block; font-size:34px; font-weight:900; }
+  .stat span { font-size:13px; letter-spacing:2px; text-transform:uppercase; color:rgba(243,234,219,.65); font-weight:700; }
+  .stat.ok { background:var(--teal); } .stat.bad { background:var(--ruby); }
+  .foot { margin-top:14px; font-size:14px; color:rgba(27,26,23,.5); font-weight:500; }
+</style>
+</head>
+<body>
+  <div>
+    <div class="eyebrow">Hams_Alarm · cloud build</div>
+    <h1 id="title">Loading…</h1>
+    <div class="build">
+      <div><span class="status" id="status">—</span></div>
+      <div class="pct" id="pct">0<small>%</small></div>
+      <div class="stage" id="stage"></div>
+      <div class="meta" id="meta"></div>
+      <div class="bar" id="bar"><div class="fill" id="fill" style="width:0%"></div></div>
+      <a class="apk" id="apk" href="#" target="_blank" style="display:none">Download APK</a>
+    </div>
+    <div class="eyebrow" style="margin-top:28px">Recent builds</div>
+    <table id="hist"></table>
+    <div class="foot">Progress is an estimate from how long your previous builds took. Status from EAS, refreshed every 20 s.</div>
+  </div>
+  <div class="right">
+    <div class="eyebrow">Your phone · live</div>
+    <div class="phone" id="phone"><div class="off">Connecting…</div></div>
+    <div class="stats">
+      <div class="stat" id="free"><span>Free storage</span><b>—</b></div>
+      <div class="stat" id="app"><span>Hams_Alarm</span><b>—</b></div>
+    </div>
+  </div>
+<script>
+const fmt = (ms) => { const m = Math.floor(ms / 60000), s = Math.floor(ms / 1000) % 60; return m + 'm ' + String(s).padStart(2, '0') + 's'; };
+const ago = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 60 ? m + ' min ago' : Math.round(m / 60) + ' h ago'; };
+let img = null;
+async function tick() {
+  let st;
+  try { st = await (await fetch('/api/state')).json(); } catch { return; }
+  const c = st.build.current;
+  document.body.classList.toggle('done', c && c.status === 'FINISHED');
+  document.body.classList.toggle('err', c && c.status === 'ERRORED');
+  if (c) {
+    const active = !['FINISHED', 'ERRORED', 'CANCELED'].includes(c.status);
+    document.getElementById('title').textContent = active ? 'Building your APK…' : c.status === 'FINISHED' ? 'Latest APK is ready' : 'Last build ' + c.status.toLowerCase();
+    document.getElementById('status').textContent = c.status.replace('_', ' ');
+    document.getElementById('pct').innerHTML = c.pct + '<small>%</small>';
+    document.getElementById('stage').textContent = c.stage;
+    document.getElementById('meta').textContent = active
+      ? 'Elapsed ' + fmt(c.elapsed) + '  ·  about ' + fmt(c.remaining) + ' left (typical build ' + fmt(c.avg) + ')'
+      : 'Took ' + fmt(c.elapsed) + '  ·  build ' + c.id.slice(0, 8);
+    document.getElementById('fill').style.width = c.pct + '%';
+    document.getElementById('bar').classList.toggle('active', active);
+    const apk = document.getElementById('apk');
+    apk.style.display = c.apk ? 'inline-block' : 'none';
+    if (c.apk) apk.href = c.apk;
+  } else if (st.build.error) {
+    document.getElementById('title').textContent = st.build.error;
+  }
+  document.getElementById('hist').innerHTML = st.build.history.slice(0, 6).map((b) =>
+    `<tr><td>${b.id.slice(0, 8)}</td><td class="s ${b.status}">${b.status.replace('_', ' ')}</td><td>${b.duration ? fmt(b.duration) : '…'}</td><td>${ago(b.createdAt)}</td></tr>`).join('');
+
+  const p = st.phone, box = document.getElementById('phone');
+  if (p.connected) {
+    if (!img) { box.innerHTML = ''; img = new Image(); box.appendChild(img); }
+    document.querySelector('#free b').textContent = p.free + ' (' + (100 - parseInt(p.pct)) + '%)';
+    const app = document.getElementById('app');
+    app.querySelector('b').textContent = p.appRunning ? 'Running' : p.appInstalled ? 'Installed' : 'Not installed';
+    app.className = 'stat ' + (p.appRunning ? 'ok' : '');
+  } else {
+    img = null;
+    box.innerHTML = '<div class="off">Phone not connected.<br>Plug it in with USB debugging on.</div>';
+  }
+}
+function refreshShot() { if (img) img.src = '/phone.png?' + Date.now(); }
+tick(); setInterval(tick, 3000); setInterval(refreshShot, 1800);
+</script>
+</body>
+</html>
