@@ -39,3 +39,9 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# secrets (Google Maps key)
+.env
+
+# phone walkthrough screenshots
+tools/shots/
