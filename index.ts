@@ -1,8 +1,18 @@
-import { registerRootComponent } from 'expo';
+// Order matters, so these are require() calls rather than hoisted imports:
+// 1. the crash reporter, so even a startup error shows on screen;
+// 2. background tasks, which must be defined at module scope before the app
+//    renders (Android may boot the JS runtime headless just to run one);
+// 3. the router entry.
+import { createElement } from 'react';
+import { AppRegistry } from 'react-native';
+import { CrashScreen, describe, installCrashHandler } from './lib/crash';
 
-import App from './App';
+installCrashHandler();
 
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
-registerRootComponent(App);
+try {
+  require('./lib/tasks');
+  require('expo-router/entry');
+} catch (e) {
+  const error = describe(e);
+  AppRegistry.registerComponent('main', () => () => createElement(CrashScreen, { error }));
+}
